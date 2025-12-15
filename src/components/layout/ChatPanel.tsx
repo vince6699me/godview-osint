@@ -22,7 +22,9 @@ export const ChatPanel = () => {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   
   const { messages, isOpen, isStreaming, addMessage, updateMessage, togglePanel, clearMessages, setIsStreaming } = useChatStore();
-  const { apiUrl, apiKey, selectedModel, isConnected } = useModelProviderStore();
+  const { selectedModel, getActiveProvider } = useModelProviderStore();
+  
+  const activeProvider = getActiveProvider();
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -44,7 +46,7 @@ export const ChatPanel = () => {
     setIsStreaming(true);
 
     // Check if model provider is configured
-    if (!isConnected || !selectedModel || !apiUrl || !apiKey) {
+    if (!activeProvider?.isConnected || !selectedModel || !activeProvider?.apiUrl || !activeProvider?.apiKey) {
       const aiMessage: ChatMessage = {
         id: crypto.randomUUID(),
         role: 'assistant',
@@ -74,10 +76,10 @@ export const ChatPanel = () => {
         { role: 'user' as const, content: userInput }
       ];
 
-      const response = await fetch(`${apiUrl}/chat/completions`, {
+      const response = await fetch(`${activeProvider.apiUrl}/chat/completions`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${apiKey}`,
+          'Authorization': `Bearer ${activeProvider.apiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -169,8 +171,8 @@ export const ChatPanel = () => {
               <div>
                 <h3 className="font-semibold text-sm">AI Assistant</h3>
                 <p className="text-xs text-muted-foreground">
-                  {isConnected && selectedModel ? (
-                    <span className="font-mono">{selectedModel}</span>
+                  {activeProvider?.isConnected && selectedModel ? (
+                    <span className="font-mono">{activeProvider.name}: {selectedModel}</span>
                   ) : (
                     'No model configured'
                   )}
