@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Zap,
+  Settings,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { TOOL_CATEGORIES } from '@/config/tools.config';
@@ -38,6 +39,7 @@ const navItems = [
     label: cat.name,
   })),
   { path: '/history', icon: History, label: 'History' },
+  { path: '/settings', icon: Settings, label: 'Settings' },
 ];
 
 export const Sidebar = () => {

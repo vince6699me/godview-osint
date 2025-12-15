@@ -13,6 +13,7 @@ import SocialMedia from "./pages/SocialMedia";
 import BreachData from "./pages/BreachData";
 import DarkWeb from "./pages/DarkWeb";
 import History from "./pages/History";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,6 +35,7 @@ const App = () => (
             <Route path="breach" element={<BreachData />} />
             <Route path="darkweb" element={<DarkWeb />} />
             <Route path="history" element={<History />} />
+            <Route path="settings" element={<Settings />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
