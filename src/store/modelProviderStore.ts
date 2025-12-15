@@ -6,41 +6,76 @@ export interface ModelInfo {
   name: string;
 }
 
-interface ModelProviderState {
+export interface ModelProvider {
+  id: string;
+  name: string;
   apiUrl: string;
   apiKey: string;
-  selectedModel: string;
   availableModels: ModelInfo[];
   isConnected: boolean;
-  setApiUrl: (url: string) => void;
-  setApiKey: (key: string) => void;
+}
+
+interface ModelProviderState {
+  providers: ModelProvider[];
+  activeProviderId: string | null;
+  selectedModel: string;
+  addProvider: (provider: Omit<ModelProvider, 'id'>) => string;
+  updateProvider: (id: string, updates: Partial<Omit<ModelProvider, 'id'>>) => void;
+  removeProvider: (id: string) => void;
+  setActiveProvider: (id: string | null) => void;
   setSelectedModel: (model: string) => void;
-  setAvailableModels: (models: ModelInfo[]) => void;
-  setIsConnected: (connected: boolean) => void;
-  clearCredentials: () => void;
+  getActiveProvider: () => ModelProvider | null;
 }
 
 export const useModelProviderStore = create<ModelProviderState>()(
   persist(
-    (set) => ({
-      apiUrl: '',
-      apiKey: '',
+    (set, get) => ({
+      providers: [],
+      activeProviderId: null,
       selectedModel: '',
-      availableModels: [],
-      isConnected: false,
 
-      setApiUrl: (apiUrl) => set({ apiUrl }),
-      setApiKey: (apiKey) => set({ apiKey }),
+      addProvider: (provider) => {
+        const id = crypto.randomUUID();
+        set((state) => ({
+          providers: [...state.providers, { ...provider, id }],
+          activeProviderId: state.activeProviderId || id,
+        }));
+        return id;
+      },
+
+      updateProvider: (id, updates) => {
+        set((state) => ({
+          providers: state.providers.map((p) =>
+            p.id === id ? { ...p, ...updates } : p
+          ),
+        }));
+      },
+
+      removeProvider: (id) => {
+        set((state) => {
+          const newProviders = state.providers.filter((p) => p.id !== id);
+          return {
+            providers: newProviders,
+            activeProviderId:
+              state.activeProviderId === id
+                ? newProviders[0]?.id || null
+                : state.activeProviderId,
+            selectedModel:
+              state.activeProviderId === id ? '' : state.selectedModel,
+          };
+        });
+      },
+
+      setActiveProvider: (id) => {
+        set({ activeProviderId: id, selectedModel: '' });
+      },
+
       setSelectedModel: (selectedModel) => set({ selectedModel }),
-      setAvailableModels: (availableModels) => set({ availableModels }),
-      setIsConnected: (isConnected) => set({ isConnected }),
-      clearCredentials: () => set({ 
-        apiUrl: '', 
-        apiKey: '', 
-        selectedModel: '', 
-        availableModels: [], 
-        isConnected: false 
-      }),
+
+      getActiveProvider: () => {
+        const state = get();
+        return state.providers.find((p) => p.id === state.activeProviderId) || null;
+      },
     }),
     {
       name: 'godview-model-provider',
