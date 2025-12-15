@@ -1,10 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, X, Trash2, Bot, User, Loader2 } from 'lucide-react';
+import { Send, X, Trash2, Bot, User, Loader2, Settings } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useChatStore } from '@/store/chatStore';
+import { useModelProviderStore } from '@/store/modelProviderStore';
 import { Button } from '@/components/ui/button';
 import { ChatMessage } from '@/types/chat.types';
+import { Link } from 'react-router-dom';
+import { toast } from 'sonner';
 
 const SUGGESTIONS = [
   "Find social media accounts for a username",
@@ -18,7 +21,8 @@ export const ChatPanel = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   
-  const { messages, isOpen, isStreaming, addMessage, togglePanel, clearMessages, setIsStreaming } = useChatStore();
+  const { messages, isOpen, isStreaming, addMessage, updateMessage, togglePanel, clearMessages, setIsStreaming } = useChatStore();
+  const { apiUrl, apiKey, selectedModel, isConnected } = useModelProviderStore();
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -35,20 +39,108 @@ export const ChatPanel = () => {
     };
 
     addMessage(userMessage);
+    const userInput = input;
     setInput('');
     setIsStreaming(true);
 
-    // Simulate AI response
-    setTimeout(() => {
+    // Check if model provider is configured
+    if (!isConnected || !selectedModel || !apiUrl || !apiKey) {
       const aiMessage: ChatMessage = {
         id: crypto.randomUUID(),
         role: 'assistant',
-        content: `I'll help you with that. Based on your request "${input}", I recommend using the appropriate OSINT tools from the sidebar. Would you like me to execute a specific tool?`,
+        content: `I'll help you with that. Based on your request "${userInput}", I recommend using the appropriate OSINT tools from the sidebar. Would you like me to execute a specific tool?\n\n*Note: Configure an AI model in Settings for enhanced responses.*`,
         timestamp: new Date().toISOString(),
       };
-      addMessage(aiMessage);
+      setTimeout(() => {
+        addMessage(aiMessage);
+        setIsStreaming(false);
+      }, 500);
+      return;
+    }
+
+    // Use the configured model provider
+    const aiMessageId = crypto.randomUUID();
+    const aiMessage: ChatMessage = {
+      id: aiMessageId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date().toISOString(),
+    };
+    addMessage(aiMessage);
+
+    try {
+      const chatMessages = [
+        ...messages.map(m => ({ role: m.role, content: m.content })),
+        { role: 'user' as const, content: userInput }
+      ];
+
+      const response = await fetch(`${apiUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: selectedModel,
+          messages: [
+            { role: 'system', content: 'You are an OSINT (Open Source Intelligence) assistant. Help users with intelligence gathering, username searches, email investigations, and other security research tasks. Be helpful, informative, and security-conscious.' },
+            ...chatMessages
+          ],
+          stream: true,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let fullContent = '';
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n').filter(line => line.trim() !== '');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') continue;
+
+              try {
+                const parsed = JSON.parse(data);
+                const content = parsed.choices?.[0]?.delta?.content;
+                if (content) {
+                  fullContent += content;
+                  updateMessage(aiMessageId, { content: fullContent });
+                }
+              } catch {
+                // Skip malformed JSON
+              }
+            }
+          }
+        }
+      }
+
+      if (!fullContent) {
+        // Handle non-streaming response
+        const data = await response.json();
+        fullContent = data.choices?.[0]?.message?.content || 'No response received';
+        updateMessage(aiMessageId, { content: fullContent });
+      }
+    } catch (error) {
+      console.error('Chat error:', error);
+      updateMessage(aiMessageId, { 
+        content: `Error communicating with the AI model. Please check your settings.\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}` 
+      });
+      toast.error('Failed to get AI response');
+    } finally {
       setIsStreaming(false);
-    }, 1500);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -76,10 +168,25 @@ export const ChatPanel = () => {
               </div>
               <div>
                 <h3 className="font-semibold text-sm">AI Assistant</h3>
-                <p className="text-xs text-muted-foreground">OSINT Intelligence</p>
+                <p className="text-xs text-muted-foreground">
+                  {isConnected && selectedModel ? (
+                    <span className="font-mono">{selectedModel}</span>
+                  ) : (
+                    'No model configured'
+                  )}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-1">
+              <Link to="/settings">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-primary"
+                >
+                  <Settings className="w-4 h-4" />
+                </Button>
+              </Link>
               <Button
                 variant="ghost"
                 size="icon"
