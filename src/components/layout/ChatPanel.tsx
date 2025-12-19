@@ -93,7 +93,29 @@ export const ChatPanel = () => {
       });
 
       if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
+        let errorMessage = `API error: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          if (errorData.error?.message) {
+            errorMessage = errorData.error.message;
+          }
+        } catch {
+          // Use default error message
+        }
+        
+        if (response.status === 429) {
+          throw new Error(`Rate limited: ${errorMessage}. Please wait a moment and try again, or try a different model.`);
+        } else if (response.status === 401) {
+          throw new Error('Invalid API key. Please check your credentials in Settings.');
+        } else if (response.status === 402) {
+          throw new Error('Payment required. Please check your account balance with the provider.');
+        } else if (response.status === 403) {
+          throw new Error('Access forbidden. Your API key may not have access to this model.');
+        } else if (response.status === 404) {
+          throw new Error('Model not found. Please select a different model in Settings.');
+        } else {
+          throw new Error(errorMessage);
+        }
       }
 
       const reader = response.body?.getReader();
