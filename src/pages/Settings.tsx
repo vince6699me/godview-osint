@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Settings as SettingsIcon, Loader2, CheckCircle, XCircle, Trash2, Plus, Server } from 'lucide-react';
+import { Settings as SettingsIcon, Loader2, CheckCircle, Trash2, Plus, Server } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,9 +10,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useModelProviderStore, ModelInfo } from '@/store/modelProviderStore';
 import { toast } from 'sonner';
 import { cn } from '@/utils/cn';
+import MCPServerSection from '@/components/settings/MCPServerSection';
 
 const PRESET_PROVIDERS = [
   { name: 'OpenAI', url: 'https://api.openai.com/v1' },
@@ -153,209 +155,222 @@ const Settings = () => {
           </div>
           <div>
             <h1 className="text-2xl font-bold">Settings</h1>
-            <p className="text-muted-foreground">Manage your AI model providers</p>
+            <p className="text-muted-foreground">Manage AI providers and MCP servers</p>
           </div>
         </div>
       </div>
 
-      {/* Provider List */}
-      <div className="space-y-4 mb-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Model Providers</h2>
-          <Button onClick={() => setIsAdding(true)} size="sm" disabled={isAdding}>
-            <Plus className="w-4 h-4 mr-2" />
-            Add Provider
-          </Button>
-        </div>
+      <Tabs defaultValue="providers" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="providers">Model Providers</TabsTrigger>
+          <TabsTrigger value="mcp">MCP Servers</TabsTrigger>
+        </TabsList>
 
-        {providers.length === 0 && !isAdding && (
-          <div className="glass-card p-8 text-center">
-            <Server className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-            <p className="text-muted-foreground mb-4">No providers configured</p>
-            <Button onClick={() => setIsAdding(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Your First Provider
-            </Button>
-          </div>
-        )}
-
-        {providers.map((provider) => (
-          <div
-            key={provider.id}
-            className={cn(
-              'glass-card p-4 cursor-pointer transition-all',
-              activeProviderId === provider.id && 'ring-2 ring-primary'
-            )}
-            onClick={() => setActiveProvider(provider.id)}
-          >
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <div className={cn(
-                  'w-10 h-10 rounded-lg flex items-center justify-center',
-                  provider.isConnected ? 'bg-green-500/20' : 'bg-muted'
-                )}>
-                  <Server className={cn(
-                    'w-5 h-5',
-                    provider.isConnected ? 'text-green-500' : 'text-muted-foreground'
-                  )} />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold">{provider.name}</h3>
-                    {provider.isConnected && (
-                      <CheckCircle className="w-4 h-4 text-green-500" />
-                    )}
-                    {activeProviderId === provider.id && (
-                      <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">
-                        Active
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground font-mono">{provider.apiUrl}</p>
-                  {provider.availableModels.length > 0 && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {provider.availableModels.length} models available
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    testAndLoadModels(provider.id, provider.apiUrl, provider.apiKey);
-                  }}
-                  disabled={isTesting === provider.id || !provider.apiKey}
-                >
-                  {isTesting === provider.id ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    'Test'
-                  )}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-destructive hover:text-destructive"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleRemoveProvider(provider.id);
-                  }}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
+        <TabsContent value="providers" className="space-y-6">
+          {/* Provider List */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Model Providers</h2>
+              <Button onClick={() => setIsAdding(true)} size="sm" disabled={isAdding}>
+                <Plus className="w-4 h-4 mr-2" />
+                Add Provider
+              </Button>
             </div>
-          </div>
-        ))}
 
-        {/* Add New Provider Form */}
-        {isAdding && (
-          <div className="glass-card p-6 space-y-4">
-            <h3 className="font-semibold">Add New Provider</h3>
-            
-            <div className="space-y-2">
-              <Label>Quick Select</Label>
-              <Select onValueChange={handlePresetSelect}>
+            {providers.length === 0 && !isAdding && (
+              <div className="glass-card p-8 text-center">
+                <Server className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                <p className="text-muted-foreground mb-4">No providers configured</p>
+                <Button onClick={() => setIsAdding(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Your First Provider
+                </Button>
+              </div>
+            )}
+
+            {providers.map((provider) => (
+              <div
+                key={provider.id}
+                className={cn(
+                  'glass-card p-4 cursor-pointer transition-all',
+                  activeProviderId === provider.id && 'ring-2 ring-primary'
+                )}
+                onClick={() => setActiveProvider(provider.id)}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      'w-10 h-10 rounded-lg flex items-center justify-center',
+                      provider.isConnected ? 'bg-green-500/20' : 'bg-muted'
+                    )}>
+                      <Server className={cn(
+                        'w-5 h-5',
+                        provider.isConnected ? 'text-green-500' : 'text-muted-foreground'
+                      )} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold">{provider.name}</h3>
+                        {provider.isConnected && (
+                          <CheckCircle className="w-4 h-4 text-green-500" />
+                        )}
+                        {activeProviderId === provider.id && (
+                          <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground font-mono">{provider.apiUrl}</p>
+                      {provider.availableModels.length > 0 && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {provider.availableModels.length} models available
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        testAndLoadModels(provider.id, provider.apiUrl, provider.apiKey);
+                      }}
+                      disabled={isTesting === provider.id || !provider.apiKey}
+                    >
+                      {isTesting === provider.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        'Test'
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-destructive hover:text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveProvider(provider.id);
+                      }}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {/* Add New Provider Form */}
+            {isAdding && (
+              <div className="glass-card p-6 space-y-4">
+                <h3 className="font-semibold">Add New Provider</h3>
+                
+                <div className="space-y-2">
+                  <Label>Quick Select</Label>
+                  <Select onValueChange={handlePresetSelect}>
+                    <SelectTrigger className="bg-secondary">
+                      <SelectValue placeholder="Choose a preset..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PRESET_PROVIDERS.map((preset) => (
+                        <SelectItem key={preset.name} value={preset.url || 'custom'}>
+                          {preset.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="providerName">Provider Name</Label>
+                  <Input
+                    id="providerName"
+                    placeholder="My Provider"
+                    value={newProviderName}
+                    onChange={(e) => setNewProviderName(e.target.value)}
+                    className="bg-secondary"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="providerUrl">API URL (OpenAI-compatible)</Label>
+                  <Input
+                    id="providerUrl"
+                    placeholder="https://api.openai.com/v1"
+                    value={newProviderUrl}
+                    onChange={(e) => setNewProviderUrl(e.target.value)}
+                    className="bg-secondary"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="providerKey">API Key</Label>
+                  <Input
+                    id="providerKey"
+                    type="password"
+                    placeholder="sk-..."
+                    value={newProviderKey}
+                    onChange={(e) => setNewProviderKey(e.target.value)}
+                    className="bg-secondary"
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <Button onClick={handleAddProvider} className="flex-1">
+                    Add Provider
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsAdding(false);
+                      setNewProviderName('');
+                      setNewProviderUrl('');
+                      setNewProviderKey('');
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Model Selection for Active Provider */}
+          {activeProvider && activeProvider.availableModels.length > 0 && (
+            <div className="glass-card p-6 space-y-4">
+              <h2 className="text-lg font-semibold">
+                Select Model from {activeProvider.name}
+              </h2>
+              
+              <Select value={selectedModel} onValueChange={handleModelSelect}>
                 <SelectTrigger className="bg-secondary">
-                  <SelectValue placeholder="Choose a preset..." />
+                  <SelectValue placeholder="Choose a model..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {PRESET_PROVIDERS.map((preset) => (
-                    <SelectItem key={preset.name} value={preset.url || 'custom'}>
-                      {preset.name}
+                  {activeProvider.availableModels.map((model) => (
+                    <SelectItem key={model.id} value={model.id}>
+                      {model.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="providerName">Provider Name</Label>
-              <Input
-                id="providerName"
-                placeholder="My Provider"
-                value={newProviderName}
-                onChange={(e) => setNewProviderName(e.target.value)}
-                className="bg-secondary"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="providerUrl">API URL (OpenAI-compatible)</Label>
-              <Input
-                id="providerUrl"
-                placeholder="https://api.openai.com/v1"
-                value={newProviderUrl}
-                onChange={(e) => setNewProviderUrl(e.target.value)}
-                className="bg-secondary"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="providerKey">API Key</Label>
-              <Input
-                id="providerKey"
-                type="password"
-                placeholder="sk-..."
-                value={newProviderKey}
-                onChange={(e) => setNewProviderKey(e.target.value)}
-                className="bg-secondary"
-              />
-            </div>
-
-            <div className="flex gap-2">
-              <Button onClick={handleAddProvider} className="flex-1">
-                Add Provider
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setIsAdding(false);
-                  setNewProviderName('');
-                  setNewProviderUrl('');
-                  setNewProviderKey('');
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Model Selection for Active Provider */}
-      {activeProvider && activeProvider.availableModels.length > 0 && (
-        <div className="glass-card p-6 space-y-4">
-          <h2 className="text-lg font-semibold">
-            Select Model from {activeProvider.name}
-          </h2>
-          
-          <Select value={selectedModel} onValueChange={handleModelSelect}>
-            <SelectTrigger className="bg-secondary">
-              <SelectValue placeholder="Choose a model..." />
-            </SelectTrigger>
-            <SelectContent>
-              {activeProvider.availableModels.map((model) => (
-                <SelectItem key={model.id} value={model.id}>
-                  {model.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {selectedModel && (
-            <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
-              <p className="text-sm">
-                <span className="text-muted-foreground">Active model:</span>{' '}
-                <span className="font-mono text-primary">{selectedModel}</span>
-              </p>
+              {selectedModel && (
+                <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
+                  <p className="text-sm">
+                    <span className="text-muted-foreground">Active model:</span>{' '}
+                    <span className="font-mono text-primary">{selectedModel}</span>
+                  </p>
+                </div>
+              )}
             </div>
           )}
-        </div>
-      )}
+        </TabsContent>
+
+        <TabsContent value="mcp">
+          <MCPServerSection />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
