@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Zap,
   Settings,
+  Terminal,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { TOOL_CATEGORIES } from '@/config/tools.config';
@@ -38,6 +39,7 @@ const navItems = [
     icon: iconMap[cat.icon] || Globe,
     label: cat.name,
   })),
+  { path: '/mcp-tools', icon: Terminal, label: 'MCP Tools' },
   { path: '/history', icon: History, label: 'History' },
   { path: '/settings', icon: Settings, label: 'Settings' },
 ];
