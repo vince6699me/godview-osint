@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Terminal, 
@@ -10,10 +10,13 @@ import {
   AlertCircle,
   CheckCircle,
   Copy,
-  Trash2
+  Trash2,
+  Clock,
+  RotateCcw
 } from 'lucide-react';
 import { useMCPStore } from '@/store/mcpStore';
 import { useMCPTools } from '@/hooks/useMCPTools';
+import { useMCPExecutionStore, type ToolExecution } from '@/store/mcpExecutionStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,32 +26,31 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { cn } from '@/utils/cn';
-import type { MCPTool, MCPToolCallResponse } from '@/types/mcp.types';
+import type { MCPTool } from '@/types/mcp.types';
 import { Link } from 'react-router-dom';
-
-interface ToolExecution {
-  id: string;
-  toolName: string;
-  args: Record<string, unknown>;
-  response: MCPToolCallResponse | null;
-  error: string | null;
-  timestamp: string;
-  isLoading: boolean;
-}
 
 const MCPTools = () => {
   const { servers } = useMCPStore();
   const { callTool, isConnected } = useMCPTools();
+  const { executions, addExecution, updateExecution, clearExecutions } = useMCPExecutionStore();
   const [selectedTool, setSelectedTool] = useState<MCPTool | null>(null);
+  const [selectedServer, setSelectedServer] = useState<string>('');
   const [toolArgs, setToolArgs] = useState<Record<string, string>>({});
-  const [executions, setExecutions] = useState<ToolExecution[]>([]);
   const [isExecuting, setIsExecuting] = useState(false);
   const [expandedServers, setExpandedServers] = useState<Set<string>>(new Set());
+  const [loadingExecutionId, setLoadingExecutionId] = useState<string | null>(null);
 
   const connectedServers = servers.filter(s => s.isConnected);
   const allTools = connectedServers.flatMap(server => 
     server.tools.map(tool => ({ ...tool, serverId: server.id, serverName: server.name }))
   );
+
+  // Auto-expand first connected server
+  useEffect(() => {
+    if (connectedServers.length > 0 && expandedServers.size === 0) {
+      setExpandedServers(new Set([connectedServers[0].id]));
+    }
+  }, [connectedServers]);
 
   const toggleServer = (serverId: string) => {
     setExpandedServers(prev => {
@@ -62,9 +64,9 @@ const MCPTools = () => {
     });
   };
 
-  const handleSelectTool = (tool: MCPTool) => {
+  const handleSelectTool = (tool: MCPTool & { serverName: string }) => {
     setSelectedTool(tool);
-    // Initialize args from schema
+    setSelectedServer(tool.serverName);
     const initialArgs: Record<string, string> = {};
     if (tool.inputSchema?.properties) {
       Object.keys(tool.inputSchema.properties).forEach(key => {
@@ -79,41 +81,48 @@ const MCPTools = () => {
 
     setIsExecuting(true);
     const executionId = crypto.randomUUID();
+    const startTime = Date.now();
     
     const newExecution: ToolExecution = {
       id: executionId,
       toolName: selectedTool.name,
+      serverName: selectedServer,
       args: { ...toolArgs },
       response: null,
       error: null,
       timestamp: new Date().toISOString(),
-      isLoading: true,
     };
     
-    setExecutions(prev => [newExecution, ...prev]);
+    addExecution(newExecution);
+    setLoadingExecutionId(executionId);
 
     try {
       const response = await callTool(selectedTool.name, toolArgs);
-      setExecutions(prev => 
-        prev.map(e => 
-          e.id === executionId 
-            ? { ...e, response, isLoading: false }
-            : e
-        )
-      );
+      const duration = Date.now() - startTime;
+      updateExecution(executionId, { response, duration });
       toast.success(`Tool "${selectedTool.name}" executed successfully`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      setExecutions(prev => 
-        prev.map(e => 
-          e.id === executionId 
-            ? { ...e, error: errorMessage, isLoading: false }
-            : e
-        )
-      );
+      const duration = Date.now() - startTime;
+      updateExecution(executionId, { error: errorMessage, duration });
       toast.error(`Failed to execute tool: ${errorMessage}`);
     } finally {
       setIsExecuting(false);
+      setLoadingExecutionId(null);
+    }
+  };
+
+  const handleRerun = (execution: ToolExecution) => {
+    const tool = allTools.find(t => t.name === execution.toolName);
+    if (tool) {
+      setSelectedTool(tool);
+      setSelectedServer(execution.serverName);
+      const args: Record<string, string> = {};
+      Object.entries(execution.args).forEach(([key, value]) => {
+        args[key] = String(value);
+      });
+      setToolArgs(args);
+      toast.info(`Loaded "${execution.toolName}" - click Execute to run`);
     }
   };
 
@@ -122,9 +131,30 @@ const MCPTools = () => {
     toast.success('Copied to clipboard');
   };
 
-  const clearExecutions = () => {
-    setExecutions([]);
+  const handleClearExecutions = () => {
+    clearExecutions();
     toast.success('Execution history cleared');
+  };
+
+  const formatDuration = (ms?: number) => {
+    if (!ms) return '';
+    if (ms < 1000) return `${ms}ms`;
+    return `${(ms / 1000).toFixed(2)}s`;
+  };
+
+  const formatTimestamp = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
   };
 
   if (!isConnected()) {
@@ -204,7 +234,7 @@ const MCPTools = () => {
                             {server.tools.map(tool => (
                               <button
                                 key={tool.name}
-                                onClick={() => handleSelectTool(tool)}
+                                onClick={() => handleSelectTool({ ...tool, serverName: server.name })}
                                 className={cn(
                                   'w-full text-left px-3 py-2 rounded-lg text-sm transition-colors',
                                   selectedTool?.name === tool.name
@@ -343,65 +373,85 @@ const MCPTools = () => {
                         </p>
                       </div>
                     ) : (
-                      executions.map(execution => (
-                        <motion.div
-                          key={execution.id}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="border rounded-lg overflow-hidden"
-                        >
-                          <div className="p-3 bg-muted/30 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              {execution.isLoading ? (
-                                <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                              ) : execution.error ? (
-                                <AlertCircle className="w-4 h-4 text-destructive" />
-                              ) : (
-                                <CheckCircle className="w-4 h-4 text-green-500" />
-                              )}
-                              <span className="font-mono text-sm font-medium">
-                                {execution.toolName}
-                              </span>
+                      executions.map(execution => {
+                        const isLoading = loadingExecutionId === execution.id;
+                        return (
+                          <motion.div
+                            key={execution.id}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="border rounded-lg overflow-hidden"
+                          >
+                            <div className="p-3 bg-muted/30 flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                {isLoading ? (
+                                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                                ) : execution.error ? (
+                                  <AlertCircle className="w-4 h-4 text-destructive" />
+                                ) : (
+                                  <CheckCircle className="w-4 h-4 text-green-500" />
+                                )}
+                                <span className="font-mono text-sm font-medium">
+                                  {execution.toolName}
+                                </span>
+                                {execution.duration && (
+                                  <Badge variant="outline" className="text-[10px] px-1">
+                                    {formatDuration(execution.duration)}
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={() => handleRerun(execution)}
+                                  title="Re-run with same arguments"
+                                >
+                                  <RotateCcw className="w-3 h-3" />
+                                </Button>
+                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  {formatTimestamp(execution.timestamp)}
+                                </span>
+                              </div>
                             </div>
-                            <span className="text-xs text-muted-foreground">
-                              {new Date(execution.timestamp).toLocaleTimeString()}
-                            </span>
-                          </div>
-                          
-                          <div className="p-3">
-                            {execution.isLoading ? (
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                Executing...
-                              </div>
-                            ) : execution.error ? (
-                              <div className="text-sm text-destructive">
-                                {execution.error}
-                              </div>
-                            ) : execution.response ? (
-                              <div className="space-y-2">
-                                {execution.response.content.map((content, i) => (
-                                  <div key={i} className="relative">
-                                    <pre className="text-xs font-mono bg-muted/50 p-2 rounded overflow-x-auto max-h-48">
-                                      {content.text || JSON.stringify(content.data, null, 2)}
-                                    </pre>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="absolute top-1 right-1 h-6 w-6"
-                                      onClick={() => copyToClipboard(content.text || JSON.stringify(content.data))}
-                                    >
-                                      <Copy className="w-3 h-3" />
-                                    </Button>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <div className="text-sm text-muted-foreground">No response</div>
-                            )}
-                          </div>
-                        </motion.div>
-                      ))
+                            
+                            <div className="p-3">
+                              {isLoading ? (
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  Executing...
+                                </div>
+                              ) : execution.error ? (
+                                <div className="text-sm text-destructive">
+                                  {execution.error}
+                                </div>
+                              ) : execution.response ? (
+                                <div className="space-y-2">
+                                  {execution.response.content.map((content, i) => (
+                                    <div key={i} className="relative">
+                                      <pre className="text-xs font-mono bg-muted/50 p-2 rounded overflow-x-auto max-h-48">
+                                        {content.text || JSON.stringify(content.data, null, 2)}
+                                      </pre>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="absolute top-1 right-1 h-6 w-6"
+                                        onClick={() => copyToClipboard(content.text || JSON.stringify(content.data))}
+                                      >
+                                        <Copy className="w-3 h-3" />
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-sm text-muted-foreground">No response</div>
+                              )}
+                            </div>
+                          </motion.div>
+                        );
+                      })
                     )}
                   </div>
                 </ScrollArea>
