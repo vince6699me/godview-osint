@@ -14,6 +14,7 @@ import BreachData from "./pages/BreachData";
 import DarkWeb from "./pages/DarkWeb";
 import History from "./pages/History";
 import Settings from "./pages/Settings";
+import MCPTools from "./pages/MCPTools";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +37,7 @@ const App = () => (
             <Route path="darkweb" element={<DarkWeb />} />
             <Route path="history" element={<History />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="mcp-tools" element={<MCPTools />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
